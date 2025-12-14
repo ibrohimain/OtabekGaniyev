@@ -1,22 +1,19 @@
 import { initializeApp } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
+import { getAuth } from 'firebase/auth';
 
-// DIQQAT: Bu yerga o'zingizning Firebase loyihangiz ma'lumotlarini qo'yishingiz kerak.
-// 1. https://console.firebase.google.com ga kiring
-// 2. Yangi loyiha oching
-// 3. Web app yarating va configlarni shu yerga nusxalang
 const firebaseConfig = {
-  apiKey: "AIzaSyD-YOUR_API_KEY_HERE",
-  authDomain: "your-project.firebaseapp.com",
-  projectId: "your-project-id",
-  storageBucket: "your-project.appspot.com",
-  messagingSenderId: "123456789",
-  appId: "1:123456789:web:abcdef"
+  apiKey: "AIzaSyC1HDJWSLhCSab1y_yomYwpBCXDOmu5Dvo",
+  authDomain: "inreports-d21c3.firebaseapp.com",
+  projectId: "inreports-d21c3",
+  storageBucket: "inreports-d21c3.firebasestorage.app",
+  messagingSenderId: "543150261055",
+  appId: "1:543150261055:web:e3b951bd332c34bda9898a"
 };
 
-// Agar config bo'lmasa xatolik bermasligi uchun dummy object
-const app = initializeApp(firebaseConfig.apiKey.includes("YOUR_API_KEY") ? {} as any : firebaseConfig);
+const app = initializeApp(firebaseConfig);
 
 export const db = getFirestore(app);
 export const storage = getStorage(app);
+export const auth = getAuth(app);

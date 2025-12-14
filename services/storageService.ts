@@ -1,4 +1,4 @@
-import { db, storage } from './firebase';
+import { db } from './firebase';
 import { 
   collection, 
   doc, 
@@ -11,7 +11,6 @@ import {
   query, 
   orderBy 
 } from 'firebase/firestore';
-import { ref, uploadString, getDownloadURL, deleteObject } from 'firebase/storage';
 import { Project, Comment } from '../types';
 
 const COLLECTION_NAME = 'projects';
@@ -21,13 +20,11 @@ export const subscribeToProjects = (onUpdate: (projects: Project[]) => void) => 
   try {
     const q = query(collection(db, COLLECTION_NAME), orderBy('timestamp', 'desc'));
     
-    // onSnapshot bu real-time listener. Bazada o'zgarish bo'lsa darhol ishlaydi
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const projects = snapshot.docs.map(doc => doc.data() as Project);
       onUpdate(projects);
     }, (error) => {
       console.error("Firebase kuzatishda xatolik:", error);
-      // Agar Firebase ulanmagan bo'lsa, bo'sh array qaytarish yoki lokal ma'lumotni ko'rsatish mumkin
       onUpdate([]);
     });
 
@@ -38,54 +35,80 @@ export const subscribeToProjects = (onUpdate: (projects: Project[]) => void) => 
   }
 };
 
-// Rasmni Storagega yuklash funksiyasi
-const uploadImageToStorage = async (base64String: string, projectId: string): Promise<string> => {
-  try {
-    // Agar rasm allaqachon URL bo'lsa (https://...), uni yuklash shart emas
-    if (base64String.startsWith('http')) {
-      return base64String;
-    }
+// Rasmni kichraytirish va Base64 ga o'tkazish (Firestore 1MB limiti uchun)
+const compressImage = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (event) => {
+      const img = new Image();
+      img.src = event.target?.result as string;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Maksimal o'lcham (juda katta bo'lmasligi kerak)
+        const MAX_WIDTH = 1000;
+        const MAX_HEIGHT = 1000;
+        let width = img.width;
+        let height = img.height;
 
-    const storageRef = ref(storage, `project-images/${projectId}`);
-    await uploadString(storageRef, base64String, 'data_url');
-    const downloadUrl = await getDownloadURL(storageRef);
-    return downloadUrl;
-  } catch (error) {
-    console.error("Rasm yuklashda xatolik:", error);
-    throw new Error("Rasmni bulutga yuklay olmadik");
-  }
+        if (width > height) {
+          if (width > MAX_WIDTH) {
+            height *= MAX_WIDTH / width;
+            width = MAX_WIDTH;
+          }
+        } else {
+          if (height > MAX_HEIGHT) {
+            width *= MAX_HEIGHT / height;
+            height = MAX_HEIGHT;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        ctx?.drawImage(img, 0, 0, width, height);
+
+        // JPEG sifati 0.7 (Firestore 1MB limitiga sig'dirish uchun)
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+        resolve(dataUrl);
+      };
+      img.onerror = (error) => reject(error);
+    };
+    reader.onerror = (error) => reject(error);
+  });
 };
 
-// Loyihani saqlash (Rasm bilan birga)
-export const saveProject = async (project: Project): Promise<void> => {
+// Loyihani saqlash
+export const saveProject = async (project: Project, imageFile?: File): Promise<void> => {
   try {
-    // 1. Agar rasm Base64 bo'lsa, avval uni Storagega yuklaymiz
-    const imageUrl = await uploadImageToStorage(project.imageUrl, project.id);
+    let imageUrl = project.imageUrl;
+
+    // Agar yangi fayl tanlangan bo'lsa, uni siqib Base64 ga o'tkazamiz
+    if (imageFile) {
+      console.log("Rasm qayta ishlanmoqda (Compression)...");
+      imageUrl = await compressImage(imageFile);
+    }
     
-    // 2. Yangi URL bilan loyihani yangilaymiz
     const projectToSave = { ...project, imageUrl };
 
-    // 3. Firestore bazasiga yozamiz
+    // Hujjat hajmini tekshirish (taxminan)
+    const sizeInBytes = new Blob([JSON.stringify(projectToSave)]).size;
+    if (sizeInBytes > 1000000) {
+       throw new Error("Rasm hajmi juda katta. Iltimos kichikroq rasm yuklang.");
+    }
+
     await setDoc(doc(db, COLLECTION_NAME, project.id), projectToSave);
+    console.log("Loyiha muvaffaqiyatli saqlandi!");
   } catch (error) {
     console.error("Loyiha saqlashda xatolik:", error);
-    alert("Ma'lumotni saqlashda xatolik bo'ldi. Firebase Config to'g'ri ekanligini tekshiring.");
+    throw error;
   }
 };
 
 export const deleteProject = async (id: string): Promise<void> => {
   try {
-    // 1. Hujjatni o'chirish
     await deleteDoc(doc(db, COLLECTION_NAME, id));
-    
-    // 2. Rasmni ham o'chirishga harakat qilamiz (agar u storage da bo'lsa)
-    const imageRef = ref(storage, `project-images/${id}`);
-    try {
-        await deleteObject(imageRef);
-    } catch (e) {
-        // Rasm topilmasa yoki tashqi URL bo'lsa, e'tibor bermaymiz
-        console.log("Rasm o'chirilmadi yoki mavjud emas edi");
-    }
   } catch (error) {
     console.error("O'chirishda xatolik:", error);
   }
@@ -105,13 +128,5 @@ export const addCommentToProject = async (projectId: string, comment: Comment): 
   });
 };
 
-// Eski initDB funksiyasi endi kerak emas, chunki Firebase schema-less
-export const initDB = async (): Promise<void> => {
-  console.log("Firebase initialized");
-  return Promise.resolve();
-};
-
-// Eski getProjects funksiyasi (faqat moslik uchun qoldirildi, lekin biz subscribe ishlatamiz)
-export const getProjects = async (): Promise<Project[]> => {
-  return [];
-};
+export const initDB = async (): Promise<void> => Promise.resolve();
+export const getProjects = async (): Promise<Project[]> => [];

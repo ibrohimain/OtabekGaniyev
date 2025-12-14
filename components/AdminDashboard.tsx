@@ -4,13 +4,14 @@ import { Project } from '../types';
 
 interface AdminDashboardProps {
   projects: Project[];
-  onAdd: (p: Project) => Promise<void>;
+  onAdd: (p: Project, file?: File) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ projects, onAdd, onDelete }) => {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [imageFile, setImageFile] = useState<File | undefined>(undefined);
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -34,15 +35,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ projects, onAdd,
         category: formData.category
       };
       
-      // onAdd bu yerda storageService.saveProject ni chaqiradi
-      // bu esa rasmni bulutga yuklashni o'z ichiga oladi
-      await onAdd(newProject);
+      // Fayl (imageFile) ni alohida jo'natamiz
+      await onAdd(newProject, imageFile);
       
       setIsFormOpen(false);
       setFormData({ title: '', description: '', imageUrl: '', category: 'General' });
+      setImageFile(undefined);
     } catch (error) {
       console.error("Failed to save project", error);
-      alert("Xatolik yuz berdi. Iltimos qayta urinib ko'ring.");
+      alert("Xatolik: Rasm hajmi juda katta bo'lishi mumkin yoki internet yo'q.");
     } finally {
       setIsSaving(false);
     }
@@ -51,12 +52,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ projects, onAdd,
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      // Fayl hajmini tekshirish (masalan 10MB)
-      if (file.size > 10 * 1024 * 1024) {
-        alert("Fayl hajmi juda katta (Max: 10MB)");
+      // 4MB dan katta fayllarni olmaymiz (siqilganda 1MB ga tushishi uchun)
+      if (file.size > 4 * 1024 * 1024) {
+        alert("Diqqat: Fayl hajmi juda katta (Max: 4MB). Storage yoqilmaganligi sababli bazaga sig'maydi.");
         return;
       }
 
+      setImageFile(file); // Faylni saqlaymiz upload uchun
+
+      // Preview uchun o'qiymiz
       const reader = new FileReader();
       reader.onloadend = () => {
         setFormData({ ...formData, imageUrl: reader.result as string });
@@ -201,7 +205,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ projects, onAdd,
                       />
                       <button 
                         type="button"
-                        onClick={() => setFormData({...formData, imageUrl: ''})}
+                        onClick={() => {
+                            setFormData({...formData, imageUrl: ''});
+                            setImageFile(undefined);
+                        }}
                         className="absolute top-2 right-2 p-1 bg-red-500/80 rounded text-white opacity-0 group-hover:opacity-100 transition-opacity"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -235,14 +242,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ projects, onAdd,
                           type="url"
                           placeholder="https://..."
                           value={formData.imageUrl.startsWith('data:') ? '' : formData.imageUrl}
-                          onChange={(e) => setFormData({...formData, imageUrl: e.target.value})}
+                          onChange={(e) => {
+                              setFormData({...formData, imageUrl: e.target.value});
+                              setImageFile(undefined);
+                          }}
                           className="w-full bg-transparent py-1 text-xs text-white focus:outline-none"
                          />
                        </div>
                     </div>
                   </div>
                 </div>
-                <p className="text-xs text-gray-500 mt-2">*Katta hajmdagi rasmlar saytni sekinlashtirishi mumkin.</p>
+                <p className="text-xs text-gray-500 mt-2">*Rasm avtomatik optimizatsiya qilinadi.</p>
               </div>
 
               <div className="pt-4 flex gap-3">

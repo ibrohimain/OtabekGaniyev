@@ -11,6 +11,8 @@ import {
   addCommentToProject, 
   subscribeToProjects 
 } from './services/storageService';
+import { auth } from './services/firebase';
+import { signInAnonymously } from 'firebase/auth';
 import { Lock, Loader2, Send } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -24,7 +26,19 @@ const App: React.FC = () => {
   const [loginError, setLoginError] = useState(false);
 
   useEffect(() => {
-    // Real-time listenerni ulash
+    // 1. Firebasega ulanish (Anonim tarzda)
+    // Bu Storage va Databasega yozish uchun ruxsat olishga yordam beradi
+    const initAuth = async () => {
+      try {
+        await signInAnonymously(auth);
+        console.log("Firebase signed in anonymously");
+      } catch (error) {
+        console.error("Auth error:", error);
+      }
+    };
+    initAuth();
+
+    // 2. Real-time listenerni ulash
     const unsubscribe = subscribeToProjects((updatedProjects) => {
       setProjects(updatedProjects);
       setLoading(false);
@@ -63,8 +77,8 @@ const App: React.FC = () => {
     }
   };
 
-  const handleAddProject = async (project: Project) => {
-    await saveProject(project);
+  const handleAddProject = async (project: Project, file?: File) => {
+    await saveProject(project, file);
     // setProjects qilish shart emas, chunki subscribeToProjects o'zi yangilaydi
   };
 
