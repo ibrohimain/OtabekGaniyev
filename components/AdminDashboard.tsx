@@ -33,11 +33,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ projects, onAdd,
         timestamp: Date.now(),
         category: formData.category
       };
+      
+      // onAdd bu yerda storageService.saveProject ni chaqiradi
+      // bu esa rasmni bulutga yuklashni o'z ichiga oladi
       await onAdd(newProject);
+      
       setIsFormOpen(false);
       setFormData({ title: '', description: '', imageUrl: '', category: 'General' });
     } catch (error) {
       console.error("Failed to save project", error);
+      alert("Xatolik yuz berdi. Iltimos qayta urinib ko'ring.");
     } finally {
       setIsSaving(false);
     }
@@ -46,6 +51,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ projects, onAdd,
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      // Fayl hajmini tekshirish (masalan 10MB)
+      if (file.size > 10 * 1024 * 1024) {
+        alert("Fayl hajmi juda katta (Max: 10MB)");
+        return;
+      }
+
       const reader = new FileReader();
       reader.onloadend = () => {
         setFormData({ ...formData, imageUrl: reader.result as string });
@@ -251,7 +262,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ projects, onAdd,
                   {isSaving ? (
                     <>
                       <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Saqlanmoqda...
+                      Yuklanmoqda...
                     </>
                   ) : (
                     "Saqlash"

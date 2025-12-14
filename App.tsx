@@ -4,7 +4,13 @@ import { ProjectCard } from './components/ProjectCard';
 import { ProjectModal } from './components/ProjectModal';
 import { AdminDashboard } from './components/AdminDashboard';
 import { Project, ViewState, Comment } from './types';
-import { getProjects, saveProject, deleteProject, toggleLikeProject, addCommentToProject, initDB } from './services/storageService';
+import { 
+  saveProject, 
+  deleteProject, 
+  toggleLikeProject, 
+  addCommentToProject, 
+  subscribeToProjects 
+} from './services/storageService';
 import { Lock, Loader2, Send } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -18,35 +24,32 @@ const App: React.FC = () => {
   const [loginError, setLoginError] = useState(false);
 
   useEffect(() => {
-    const initialize = async () => {
-      try {
-        await initDB();
-        const data = await getProjects();
-        setProjects(data);
-      } catch (err) {
-        console.error("Database initialization failed", err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    initialize();
+    // Real-time listenerni ulash
+    const unsubscribe = subscribeToProjects((updatedProjects) => {
+      setProjects(updatedProjects);
+      setLoading(false);
+      
+      // Agar modal ochiq bo'lsa, uning ichidagi ma'lumotni ham yangilash (masalan yangi like yoki comment)
+      setSelectedProject(prev => {
+        if (!prev) return null;
+        const found = updatedProjects.find(p => p.id === prev.id);
+        return found || null; // Agar loyiha o'chirilgan bo'lsa, modalni yopish uchun null
+      });
+    });
+
+    // Component o'chganda listenerni to'xtatish
+    return () => unsubscribe();
   }, []);
 
-  // Handlers (Async wrappers)
+  // Handlers
   const handleLike = async (id: string) => {
-    const updated = await toggleLikeProject(id);
-    setProjects(updated);
-    if (selectedProject && selectedProject.id === id) {
-      setSelectedProject(updated.find(p => p.id === id) || null);
-    }
+    // UI ni darhol yangilash shart emas, Firebase o'zi qaytaradi,
+    // lekin optimistik update qilish mumkin. Hozircha oddiy qoldiramiz.
+    await toggleLikeProject(id);
   };
 
   const handleComment = async (id: string, comment: Comment) => {
-    const updated = await addCommentToProject(id, comment);
-    setProjects(updated);
-    if (selectedProject && selectedProject.id === id) {
-      setSelectedProject(updated.find(p => p.id === id) || null);
-    }
+    await addCommentToProject(id, comment);
   };
 
   const handleAdminLogin = (e: React.FormEvent) => {
@@ -61,14 +64,13 @@ const App: React.FC = () => {
   };
 
   const handleAddProject = async (project: Project) => {
-    const updated = await saveProject(project);
-    setProjects(updated);
+    await saveProject(project);
+    // setProjects qilish shart emas, chunki subscribeToProjects o'zi yangilaydi
   };
 
   const handleDeleteProject = async (id: string) => {
     if (window.confirm("Rostdan ham o'chirmoqchimisiz?")) {
-      const updated = await deleteProject(id);
-      setProjects(updated);
+      await deleteProject(id);
     }
   };
 
@@ -76,6 +78,7 @@ const App: React.FC = () => {
     return (
       <div className="min-h-screen bg-dark-bg flex items-center justify-center">
         <Loader2 className="w-10 h-10 text-brand-500 animate-spin" />
+        <p className="ml-3 text-gray-400">Loading projects...</p>
       </div>
     );
   }
@@ -128,8 +131,9 @@ const App: React.FC = () => {
               ))}
             </div>
             {projects.length === 0 && (
-               <div className="text-center py-20 text-gray-500">
-                 Hozircha loyihalar mavjud emas.
+               <div className="text-center py-20 bg-dark-card/30 rounded-xl border border-white/5">
+                 <p className="text-gray-400 mb-2">Hozircha loyihalar mavjud emas.</p>
+                 <p className="text-sm text-gray-500">Firebase ulanganini tekshiring.</p>
                </div>
             )}
           </section>
